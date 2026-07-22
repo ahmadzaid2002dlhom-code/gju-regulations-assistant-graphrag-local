@@ -68,6 +68,8 @@ def main() -> None:
             ("All regulations", "General regulations", "German Year"),
         )
         st.divider()
+        if settings.experimental_graphrag:
+            st.caption("Local GraphRAG experiment: enabled")
         st.caption(
             "This assistant explains indexed regulations. The official document "
             "and the responsible GJU office remain authoritative."
@@ -138,6 +140,8 @@ def main() -> None:
     with st.expander("Show retrieved evidence"):
         for source in result.sources:
             st.markdown(f"**{source.source_id} — {source.hit.document_title}**")
+            if source.hit.retrieval_reasons:
+                st.caption("Retrieved because: " + "; ".join(source.hit.retrieval_reasons))
             st.write(source.hit.chunk_text)
             st.divider()
 

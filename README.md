@@ -1,11 +1,17 @@
 # GJU Student Regulations Assistant
 
-This repository contains Phase 1 of a page- and article-aware RAG assistant for
+> Local experiment only. This copy has no GitHub remote and does not deploy to
+> Streamlit. The submitted repository and public website remain unchanged.
+
+This repository extends the page- and article-aware RAG assistant for
 official GJU regulations. It runs Streamlit and PDF extraction locally while
 OpenAI provides embeddings and answer generation, and Supabase stores metadata,
 searchable text, and 768-dimensional vectors.
 
-**Live demo:** https://gju-regulations-assistant.streamlit.app/
+The experiment keeps the original retriever as a fallback and adds a first
+GraphRAG-style path: vector/full-text/title results provide anchor articles,
+explicit legal references are expanded locally, and Reciprocal Rank Fusion
+combines all result lists.
 
 ## What is implemented
 
@@ -17,7 +23,11 @@ searchable text, and 768-dimensional vectors.
 - Article-preserving chunks with token overlap only for long articles
 - OpenAI `text-embedding-3-small` embeddings at 768 dimensions
 - Supabase vector, full-text, and section-title search
-- Weighted hybrid reranking and evidence diversification
+- Reciprocal Rank Fusion across vector, full-text, title, and graph results
+- Query planning for explicit articles, legal relations, and composite questions
+- Local article-reference and adjacent-article graph expansion
+- Legal ranking boosts and evidence-path explanations
+- Original weighted reranker available through a feature flag
 - OpenAI Responses API answers restricted to retrieved evidence
 - Streamlit source cards, official links, and evidence inspection
 - Row-level security that gives the public app read-only access to current data
@@ -33,6 +43,7 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 OPENAI_OCR_MODEL=gpt-5.6-luna
+EXPERIMENTAL_GRAPHRAG=true
 ```
 
 The public Streamlit app uses only the anonymous key. The service-role key is
@@ -46,7 +57,21 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-## 2. Create the Supabase database
+The copied `.env` already enables the experiment through the default setting.
+Set `EXPERIMENTAL_GRAPHRAG=false` at any time to compare it with the original
+weighted retriever.
+
+## 2. Database safety
+
+To try this local copy with the already indexed documents, do not run any SQL.
+The experimental retriever uses the existing read-only anonymous Supabase access
+and performs deterministic graph expansion in Python.
+
+`database/graphrag_experiment.sql` is an optional design for a future, separate
+Supabase project. It is intentionally not required and should not be applied to
+the database used by the submitted public website.
+
+For a completely new Supabase project, run the original base files in order:
 
 Open the Supabase SQL editor and run these files in order:
 
@@ -54,7 +79,7 @@ Open the Supabase SQL editor and run these files in order:
 2. `database/functions.sql`
 3. `database/indexes.sql`
 
-The SQL enables `pgvector`, creates the four core tables, enables RLS, and adds
+The base SQL enables `pgvector`, creates the four core tables, enables RLS, and adds
 three read-only RPC search functions. Keep `EMBEDDING_DIMENSIONS=768`; changing
 it requires changing the SQL vector type and regenerating all embeddings.
 
@@ -108,11 +133,26 @@ streamlit run app.py
 Open `http://localhost:8501`. Until Supabase is configured, the interface opens
 in setup mode and does not make API calls.
 
+The sidebar shows `Local GraphRAG experiment: enabled`. Composite questions,
+questions naming an article, and questions using terms such as “except,”
+“according to,” or “final semester” trigger local graph expansion. Direct
+single-rule questions still use the normal hybrid retrieval path.
+
 To test from the terminal after ingestion:
 
 ```powershell
 python scripts/test_question.py "Can I register extra credit hours in my final semester?"
 ```
+
+To compare the original ranking with the local GraphRAG experiment on the same
+question:
+
+```powershell
+python scripts/compare_retrieval.py "What is the course load for a student under warning in the final semester?"
+```
+
+This comparison performs two query-embedding calls but does not generate an
+answer, so it is intended for occasional evaluation rather than normal use.
 
 ## 6. Verify locally
 
@@ -149,13 +189,9 @@ fallback for image-only PDF pages. `text-embedding-3-small` provides the
 768-dimensional document and query embeddings used by the hybrid retrieval
 pipeline.
 
-## Deployment path
+## Experiment boundary
 
-The included Dockerfile runs the same app on Render, Railway, or another
-container platform. Add only `OPENAI_API_KEY`, `SUPABASE_URL`, and
-`SUPABASE_ANON_KEY` to the public service. Keep ingestion and
-`SUPABASE_SERVICE_ROLE_KEY` in a separate administrative job.
-
-GitHub Actions runs the unit suite on pushes and pull requests. The separate
-`Ingest GJU documents` workflow is manual by default; add a schedule only after
-the source manifest and repository secrets have been verified.
+This local repository intentionally has no remote. Do not connect it to the
+submitted GitHub repository or Streamlit app while comparing retrieval quality.
+If the experiment proves better, its changes can be reviewed and migrated later
+as a separate decision.

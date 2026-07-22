@@ -238,3 +238,28 @@ class SupabaseRepository:
             },
         ).execute()
         return list(response.data or [])
+
+    def fetch_article_chunks(
+        self,
+        document_id: str,
+        article_numbers: list[str],
+        *,
+        match_count: int,
+    ) -> list[dict[str, Any]]:
+        if not article_numbers:
+            return []
+        response = (
+            self._client.table("chunks")
+            .select(
+                "id,document_id,section_id,chunk_text,section_title,article_number,"
+                "pdf_page_start,pdf_page_end,printed_page_start,printed_page_end,"
+                "document_status,language,chunk_index"
+            )
+            .eq("document_id", document_id)
+            .eq("document_status", "current")
+            .in_("article_number", article_numbers)
+            .order("chunk_index")
+            .limit(max(1, min(match_count, 100)))
+            .execute()
+        )
+        return list(response.data or [])

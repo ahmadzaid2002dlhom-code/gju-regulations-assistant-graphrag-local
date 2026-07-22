@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     retrieval_candidates: int = Field(default=20, ge=3, le=100)
     final_evidence_chunks: int = Field(default=5, ge=1, le=10)
     max_answer_tokens: int = Field(default=800, ge=100, le=4000)
+    experimental_graphrag: bool = True
+    graph_seed_sections: int = Field(default=4, ge=1, le=20)
+    graph_candidate_limit: int = Field(default=40, ge=1, le=100)
 
     @property
     def openai_key(self) -> str:

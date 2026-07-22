@@ -30,6 +30,13 @@ def format_evidence(sources: list[EvidenceSource]) -> str:
             metadata.append(f"Published: {hit.published_date}")
         if hit.effective_date:
             metadata.append(f"Effective: {hit.effective_date}")
+        if hit.retrieval_reasons:
+            metadata.append("Retrieved because: " + "; ".join(hit.retrieval_reasons))
+        if hit.graph_path and hit.relation_path:
+            path_parts = [hit.graph_path[0]]
+            for relation, node in zip(hit.relation_path, hit.graph_path[1:], strict=False):
+                path_parts.extend((relation, node))
+            metadata.append("Graph path: " + " -> ".join(path_parts))
         metadata.append(f"Official URL: {hit.source_url}")
         metadata.append("Text:\n" + hit.chunk_text)
         blocks.append("\n".join(metadata))

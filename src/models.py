@@ -84,6 +84,7 @@ class RetrievalHit:
     article_number: str | None
     pdf_page_start: int
     pdf_page_end: int
+    section_id: str | None = None
     printed_page_start: str | None = None
     printed_page_end: str | None = None
     published_date: str | None = None
@@ -93,20 +94,28 @@ class RetrievalHit:
     vector_score: float = 0.0
     keyword_score: float = 0.0
     section_score: float = 0.0
+    graph_score: float = 0.0
     freshness_score: float = 0.0
+    fusion_score: float = 0.0
+    graph_distance: int | None = None
+    graph_path: list[str] = field(default_factory=list)
+    relation_path: list[str] = field(default_factory=list)
+    retrieval_reasons: list[str] = field(default_factory=list)
+    retrieval_sources: list[str] = field(default_factory=list)
     final_score: float = 0.0
 
     @classmethod
     def from_mapping(
         cls,
         value: dict[str, Any],
-        score_kind: Literal["vector", "keyword", "section"],
+        score_kind: Literal["vector", "keyword", "section", "graph"],
     ) -> "RetrievalHit":
         raw_score = float(value.get("score") or value.get("similarity") or 0.0)
         score_values = {
             "vector_score": raw_score if score_kind == "vector" else 0.0,
             "keyword_score": raw_score if score_kind == "keyword" else 0.0,
             "section_score": raw_score if score_kind == "section" else 0.0,
+            "graph_score": raw_score if score_kind == "graph" else 0.0,
         }
         return cls(
             chunk_id=str(value.get("chunk_id") or value.get("id") or ""),
@@ -118,6 +127,7 @@ class RetrievalHit:
             article_number=value.get("article_number"),
             pdf_page_start=int(value.get("pdf_page_start") or value.get("page_start") or 1),
             pdf_page_end=int(value.get("pdf_page_end") or value.get("page_end") or value.get("pdf_page_start") or 1),
+            section_id=str(value["section_id"]) if value.get("section_id") else None,
             printed_page_start=value.get("printed_page_start"),
             printed_page_end=value.get("printed_page_end"),
             published_date=str(value["published_date"]) if value.get("published_date") else None,
