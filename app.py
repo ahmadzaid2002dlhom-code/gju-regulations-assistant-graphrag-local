@@ -8,7 +8,10 @@ import streamlit as st
 from src.config import Settings, get_settings
 from src.database.repositories import SupabaseRepository
 from src.database.supabase_client import create_supabase_client
-from src.generation.answer_generator import OpenAIGenerationProvider
+from src.generation.answer_generator import (
+    OllamaGenerationProvider,
+    OpenAIGenerationProvider,
+)
 from src.generation.citation_builder import source_page_url, source_summary
 from src.generation.service import QuestionAnsweringService
 from src.ingestion.embedding_service import OpenAIEmbeddingProvider
@@ -23,11 +26,28 @@ st.set_page_config(
 
 
 @st.cache_resource
-def build_service(settings: Settings) -> QuestionAnsweringService:
-    repository = SupabaseRepository(create_supabase_client(settings))
-    embedding_provider = OpenAIEmbeddingProvider(settings)
-    retriever = HybridRetriever(repository, embedding_provider, settings)
-    generator = OpenAIGenerationProvider(settings)
+def build_service(
+    settings: Settings,
+    generation_provider: str,
+) -> QuestionAnsweringService:
+    effective_settings = settings
+    if generation_provider == "ollama":
+        effective_settings = settings.model_copy(
+            update={
+                "final_evidence_chunks": min(
+                    settings.final_evidence_chunks,
+                    settings.ollama_evidence_chunks,
+                )
+            }
+        )
+    repository = SupabaseRepository(create_supabase_client(effective_settings))
+    embedding_provider = OpenAIEmbeddingProvider(effective_settings)
+    retriever = HybridRetriever(repository, embedding_provider, effective_settings)
+    generator = (
+        OllamaGenerationProvider(effective_settings)
+        if generation_provider == "ollama"
+        else OpenAIGenerationProvider(effective_settings)
+    )
     return QuestionAnsweringService(retriever, generator)
 
 
@@ -67,6 +87,23 @@ def main() -> None:
             "Document category",
             ("All regulations", "General regulations", "German Year"),
         )
+        provider_labels = {
+            "Local Qwen 1.7B (no generation API tokens)": "ollama",
+            "OpenAI (higher accuracy)": "openai",
+        }
+        default_provider = settings.default_generation_provider
+        default_index = 0 if default_provider == "ollama" else 1
+        provider_label = st.selectbox(
+            "Answer model",
+            tuple(provider_labels),
+            index=default_index,
+        )
+        generation_provider = provider_labels[provider_label]
+        if generation_provider == "ollama":
+            st.caption(
+                "Runs on this PC. Retrieval still uses one small OpenAI embedding "
+                "request so it remains compatible with the existing index."
+            )
         st.divider()
         if settings.experimental_graphrag:
             st.caption("Local GraphRAG experiment: enabled")
@@ -107,20 +144,33 @@ def main() -> None:
     }
 
     try:
-        with st.spinner("Searching the official regulations…"):
-            result = build_service(settings).answer(
+        spinner_text = (
+            "Searching, then generating locally…"
+            if generation_provider == "ollama"
+            else "Searching the official regulations…"
+        )
+        with st.spinner(spinner_text):
+            result = build_service(settings, generation_provider).answer(
                 question.strip(),
                 document_type=category_map[category_label],
                 language=language_map[language_label],
                 safety_identifier=visitor_identifier(),
             )
     except Exception as error:
-        st.error("The question could not be processed. Check the API and Supabase configuration.")
+        st.error(
+            "The question could not be processed. Check Ollama, OpenAI embeddings, "
+            "and the Supabase configuration."
+        )
         with st.expander("Technical details"):
             st.code(str(error))
         return
 
     st.subheader("Answer")
+    if generation_provider == "ollama":
+        st.warning(
+            "Experimental local answer: verify every number and condition against "
+            "the official sources below. Use OpenAI mode for higher accuracy."
+        )
     st.markdown(result.text)
 
     st.subheader("Official sources")

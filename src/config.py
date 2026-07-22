@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,14 @@ class Settings(BaseSettings):
     retrieval_candidates: int = Field(default=20, ge=3, le=100)
     final_evidence_chunks: int = Field(default=5, ge=1, le=10)
     max_answer_tokens: int = Field(default=800, ge=100, le=4000)
+    default_generation_provider: Literal["ollama", "openai"] = "ollama"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3:1.7b"
+    ollama_context_window: int = Field(default=4096, ge=1024, le=8192)
+    ollama_max_output_tokens: int = Field(default=350, ge=64, le=800)
+    ollama_evidence_chunks: int = Field(default=3, ge=1, le=5)
+    ollama_timeout_seconds: float = Field(default=240.0, ge=10.0, le=600.0)
+    ollama_keep_alive: str = "2m"
     experimental_graphrag: bool = True
     graph_seed_sections: int = Field(default=4, ge=1, le=20)
     graph_candidate_limit: int = Field(default=40, ge=1, le=100)

@@ -16,6 +16,17 @@ State the answer directly. This is an informational assistant, not an official
 administrative decision.
 """
 
+LOCAL_SYSTEM_PROMPT = SYSTEM_PROMPT + """
+
+You are running as a small local model. Follow these additional constraints:
+1. Identify the evidence sentence that matches every condition in the question.
+2. Prefer a specific exception over a general rule.
+3. Copy numbers, dates, article numbers, and conditions exactly.
+4. Never merge limits or requirements from different sources.
+5. Keep the answer to at most three short paragraphs.
+6. Cite every factual sentence with a supplied source identifier such as [S1].
+"""
+
 
 def build_user_prompt(question: str, evidence: str) -> str:
     return f"""STUDENT QUESTION

@@ -13,6 +13,11 @@ GraphRAG-style path: vector/full-text/title results provide anchor articles,
 explicit legal references are expanded locally, and Reciprocal Rank Fusion
 combines all result lists.
 
+It also provides an optional local answer generator through Ollama. Retrieval
+continues to use the existing OpenAI query embeddings because query and document
+embeddings must come from the same model. Local mode therefore removes answer-
+generation token usage while retaining one small embedding request per question.
+
 ## What is implemented
 
 - Checksum-based PDF ingestion and version tracking
@@ -28,6 +33,8 @@ combines all result lists.
 - Local article-reference and adjacent-article graph expansion
 - Legal ranking boosts and evidence-path explanations
 - Original weighted reranker available through a feature flag
+- Selectable local `qwen3:1.7b` answer generation through Ollama
+- OpenAI generation retained as the higher-accuracy comparison option
 - OpenAI Responses API answers restricted to retrieved evidence
 - Streamlit source cards, official links, and evidence inspection
 - Row-level security that gives the public app read-only access to current data
@@ -44,6 +51,8 @@ SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 OPENAI_OCR_MODEL=gpt-5.6-luna
 EXPERIMENTAL_GRAPHRAG=true
+DEFAULT_GENERATION_PROVIDER=ollama
+OLLAMA_MODEL=qwen3:1.7b
 ```
 
 The public Streamlit app uses only the anonymous key. The service-role key is
@@ -138,11 +147,38 @@ questions naming an article, and questions using terms such as “except,”
 “according to,” or “final semester” trigger local graph expansion. Direct
 single-rule questions still use the normal hybrid retrieval path.
 
+### Local model mode
+
+Install Ollama for Windows and download the tested model once:
+
+```powershell
+ollama pull qwen3:1.7b
+```
+
+The sidebar lets you choose between:
+
+- `Local Qwen 1.7B`: no answer-generation API tokens, slower and less reliable.
+- `OpenAI`: higher answer quality, with normal generation token usage.
+
+The local model is already 4-bit quantized. It runs with thinking disabled, a
+4,096-token context, at most three evidence chunks, and a 350-token output cap.
+On the tested 8 GB laptop it runs on CPU because the older Vulkan GPU backend
+was unstable. Treat local answers as experimental and verify every number and
+condition against the displayed source text.
+
+TurboVec is not used in this experiment. It is a free third-party MIT-licensed
+vector index based on Google Research's TurboQuant algorithm. It compresses
+stored embedding vectors, but this project's vectors are already stored in
+Supabase rather than laptop RAM. It does not compress Ollama's model weights or
+reduce the VRAM/RAM required by `qwen3:1.7b`.
+
 To test from the terminal after ingestion:
 
 ```powershell
-python scripts/test_question.py "Can I register extra credit hours in my final semester?"
+python scripts/test_question.py "Can I register extra credit hours in my final semester?" --provider ollama
 ```
+
+Use `--provider openai` for the higher-accuracy comparison.
 
 To compare the original ranking with the local GraphRAG experiment on the same
 question:
