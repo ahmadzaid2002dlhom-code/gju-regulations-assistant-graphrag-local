@@ -9,6 +9,7 @@ from src.config import Settings, get_settings
 from src.database.repositories import SupabaseRepository
 from src.database.supabase_client import create_supabase_client
 from src.generation.answer_generator import (
+    NvidiaGenerationProvider,
     OllamaGenerationProvider,
     OpenAIGenerationProvider,
 )
@@ -43,11 +44,12 @@ def build_service(
     repository = SupabaseRepository(create_supabase_client(effective_settings))
     embedding_provider = OpenAIEmbeddingProvider(effective_settings)
     retriever = HybridRetriever(repository, embedding_provider, effective_settings)
-    generator = (
-        OllamaGenerationProvider(effective_settings)
-        if generation_provider == "ollama"
-        else OpenAIGenerationProvider(effective_settings)
-    )
+    if generation_provider == "ollama":
+        generator = OllamaGenerationProvider(effective_settings)
+    elif generation_provider == "nvidia":
+        generator = NvidiaGenerationProvider(effective_settings)
+    else:
+        generator = OpenAIGenerationProvider(effective_settings)
     return QuestionAnsweringService(retriever, generator)
 
 
@@ -88,11 +90,17 @@ def main() -> None:
             ("All regulations", "General regulations", "German Year"),
         )
         provider_labels = {
-            "Local Qwen 1.7B (no generation API tokens)": "ollama",
+            "NVIDIA Nemotron 3.5 Lightning (hosted)": "nvidia",
             "OpenAI (higher accuracy)": "openai",
+            "Local Qwen 1.7B (no generation API tokens)": "ollama",
         }
-        default_provider = settings.default_generation_provider
-        default_index = 0 if default_provider == "ollama" else 1
+        default_provider = settings.semantic_ai_generation_provider
+        provider_values = tuple(provider_labels.values())
+        default_index = (
+            provider_values.index(default_provider)
+            if default_provider in provider_values
+            else 0
+        )
         provider_label = st.selectbox(
             "Answer model",
             tuple(provider_labels),
@@ -103,6 +111,11 @@ def main() -> None:
             st.caption(
                 "Runs on this PC. Retrieval still uses one small OpenAI embedding "
                 "request so it remains compatible with the existing index."
+            )
+        elif generation_provider == "nvidia":
+            st.caption(
+                "Hosted NVIDIA NIM generation. Retrieval still uses the existing "
+                "OpenAI embedding index in Supabase."
             )
         st.divider()
         if settings.experimental_graphrag:
@@ -143,12 +156,23 @@ def main() -> None:
         "German Year": "german_year",
     }
 
+    generation_errors = settings.generation_configuration_errors(generation_provider)
+    if generation_errors:
+        st.warning(
+            "Configure the selected answer model: "
+            + ", ".join(generation_errors)
+            + "."
+        )
+        return
+
     try:
         spinner_text = (
             "Searching, then generating locally…"
             if generation_provider == "ollama"
             else "Searching the official regulations…"
         )
+        if generation_provider == "nvidia":
+            spinner_text = "Searching, then generating with NVIDIA Nemotron..."
         with st.spinner(spinner_text):
             result = build_service(settings, generation_provider).answer(
                 question.strip(),
@@ -158,8 +182,8 @@ def main() -> None:
             )
     except Exception as error:
         st.error(
-            "The question could not be processed. Check Ollama, OpenAI embeddings, "
-            "and the Supabase configuration."
+            "The question could not be processed. Check the selected generation "
+            "provider, OpenAI embeddings, and the Supabase configuration."
         )
         with st.expander("Technical details"):
             st.code(str(error))

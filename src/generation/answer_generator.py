@@ -55,6 +55,83 @@ class OpenAIGenerationProvider:
         return ensure_source_references(answer, evidence)
 
 
+class NvidiaGenerationProvider:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self._client = client or httpx.Client(
+            timeout=settings.semantic_ai_generation_timeout_seconds
+        )
+        self._url = (
+            settings.semantic_ai_generation_base_url.rstrip("/")
+            + "/chat/completions"
+        )
+        self._model = settings.semantic_ai_generation_model
+        self._max_output_tokens = settings.semantic_ai_generation_max_tokens
+        self._api_key = settings.nvidia_key
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), reraise=True)
+    def answer(
+        self,
+        question: str,
+        evidence: list[EvidenceSource],
+        *,
+        safety_identifier: str | None = None,
+    ) -> str:
+        del safety_identifier
+        if not self._api_key:
+            raise RuntimeError("NVIDIA_API_KEY is missing.")
+
+        payload = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": build_user_prompt(
+                        question,
+                        format_evidence(evidence),
+                    ),
+                },
+            ],
+            "temperature": 0.2,
+            "top_p": 0.95,
+            "max_tokens": self._max_output_tokens,
+            "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
+            "reasoning_budget": 0,
+        }
+        try:
+            response = self._client.post(
+                self._url,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise RuntimeError(
+                "The NVIDIA generation request failed with HTTP status "
+                f"{error.response.status_code}."
+            ) from error
+        except httpx.HTTPError as error:
+            raise RuntimeError("The NVIDIA generation endpoint is unavailable.") from error
+
+        data = response.json()
+        choices = data.get("choices") or []
+        answer = ""
+        if choices:
+            answer = str((choices[0].get("message") or {}).get("content") or "").strip()
+        if not answer:
+            raise RuntimeError("The NVIDIA generation model returned an empty answer.")
+        return ensure_source_references(answer, evidence)
+
+
 class OllamaGenerationProvider:
     def __init__(
         self,

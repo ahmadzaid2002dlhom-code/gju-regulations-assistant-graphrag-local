@@ -1,19 +1,21 @@
 # GJU Student Regulations Assistant
 
-> Local experiment only. This copy has no GitHub remote and does not deploy to
-> Streamlit. The submitted repository and public website remain unchanged.
+> Separate experiment repository. Its deployment is independent from the
+> submitted repository and original public website.
 
 This repository extends the page- and article-aware RAG assistant for
 official GJU regulations. It runs Streamlit and PDF extraction locally while
-OpenAI provides embeddings and answer generation, and Supabase stores metadata,
-searchable text, and 768-dimensional vectors.
+OpenAI provides embeddings, NVIDIA NIM or OpenAI provides hosted answer
+generation, and Supabase stores metadata, searchable text, and 768-dimensional
+vectors.
 
 The experiment keeps the original retriever as a fallback and adds a first
 GraphRAG-style path: vector/full-text/title results provide anchor articles,
 explicit legal references are expanded locally, and Reciprocal Rank Fusion
 combines all result lists.
 
-It also provides an optional local answer generator through Ollama. Retrieval
+It also provides NVIDIA Nemotron through NVIDIA's hosted OpenAI-compatible API
+and an optional local answer generator through Ollama. Retrieval
 continues to use the existing OpenAI query embeddings because query and document
 embeddings must come from the same model. Local mode therefore removes answer-
 generation token usage while retaining one small embedding request per question.
@@ -34,6 +36,7 @@ generation token usage while retaining one small embedding request per question.
 - Legal ranking boosts and evidence-path explanations
 - Original weighted reranker available through a feature flag
 - Selectable local `qwen3:1.7b` answer generation through Ollama
+- Hosted `nvidia/nemotron-3.5-lightning-30b-a3b` generation through NVIDIA NIM
 - OpenAI generation retained as the higher-accuracy comparison option
 - OpenAI Responses API answers restricted to retrieved evidence
 - Streamlit source cards, official links, and evidence inspection
@@ -51,7 +54,10 @@ SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 OPENAI_OCR_MODEL=gpt-5.6-luna
 EXPERIMENTAL_GRAPHRAG=true
-DEFAULT_GENERATION_PROVIDER=ollama
+SEMANTIC_AI_GENERATION_PROVIDER=nvidia
+SEMANTIC_AI_GENERATION_BASE_URL=https://integrate.api.nvidia.com/v1
+SEMANTIC_AI_GENERATION_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
+NVIDIA_API_KEY=YOUR_NVIDIA_API_KEY
 OLLAMA_MODEL=qwen3:1.7b
 ```
 
@@ -157,14 +163,15 @@ ollama pull qwen3:1.7b
 
 The sidebar lets you choose between:
 
+- `NVIDIA Nemotron 3.5 Lightning`: hosted generation and the deployment default.
 - `Local Qwen 1.7B`: no answer-generation API tokens, slower and less reliable.
 - `OpenAI`: higher answer quality, with normal generation token usage.
 
 The local model is already 4-bit quantized. It runs with thinking disabled, a
 4,096-token context, at most three evidence chunks, and a 350-token output cap.
-On the tested 8 GB laptop it runs on CPU because the older Vulkan GPU backend
-was unstable. Treat local answers as experimental and verify every number and
-condition against the displayed source text.
+On the tested 8 GB laptop it uses hybrid CUDA offload on the 2 GB MX130. Treat
+local answers as experimental and verify every number and condition against the
+displayed source text.
 
 TurboVec is not used in this experiment. It is a free third-party MIT-licensed
 vector index based on Google Research's TurboQuant algorithm. It compresses
@@ -175,10 +182,11 @@ reduce the VRAM/RAM required by `qwen3:1.7b`.
 To test from the terminal after ingestion:
 
 ```powershell
-python scripts/test_question.py "Can I register extra credit hours in my final semester?" --provider ollama
+python scripts/test_question.py "Can I register extra credit hours in my final semester?" --provider nvidia
 ```
 
-Use `--provider openai` for the higher-accuracy comparison.
+Use `--provider ollama` for local generation or `--provider openai` for the
+OpenAI comparison.
 
 To compare the original ranking with the local GraphRAG experiment on the same
 question:
@@ -225,9 +233,9 @@ fallback for image-only PDF pages. `text-embedding-3-small` provides the
 768-dimensional document and query embeddings used by the hybrid retrieval
 pipeline.
 
-## Experiment boundary
+## Deployment boundary
 
-This local repository intentionally has no remote. Do not connect it to the
-submitted GitHub repository or Streamlit app while comparing retrieval quality.
-If the experiment proves better, its changes can be reviewed and migrated later
-as a separate decision.
+Deploy this repository as a separate Streamlit Community Cloud app. Configure
+`OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `NVIDIA_API_KEY`, and the
+three `SEMANTIC_AI_GENERATION_*` values as server secrets. Never add the
+service-role key to the public question-answering app.

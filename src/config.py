@@ -29,7 +29,17 @@ class Settings(BaseSettings):
     retrieval_candidates: int = Field(default=20, ge=3, le=100)
     final_evidence_chunks: int = Field(default=5, ge=1, le=10)
     max_answer_tokens: int = Field(default=800, ge=100, le=4000)
-    default_generation_provider: Literal["ollama", "openai"] = "ollama"
+    default_generation_provider: Literal["ollama", "openai", "nvidia"] = "ollama"
+    semantic_ai_generation_provider: Literal["ollama", "openai", "nvidia"] = "nvidia"
+    semantic_ai_generation_base_url: str = "https://integrate.api.nvidia.com/v1"
+    semantic_ai_generation_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    semantic_ai_generation_max_tokens: int = Field(default=700, ge=100, le=4000)
+    semantic_ai_generation_timeout_seconds: float = Field(
+        default=120.0,
+        ge=10.0,
+        le=600.0,
+    )
+    nvidia_api_key: SecretStr = SecretStr("")
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:1.7b"
     ollama_context_window: int = Field(default=4096, ge=1024, le=8192)
@@ -52,6 +62,15 @@ class Settings(BaseSettings):
     @property
     def service_role_key(self) -> str:
         return self.supabase_service_role_key.get_secret_value()
+
+    @property
+    def nvidia_key(self) -> str:
+        return self.nvidia_api_key.get_secret_value()
+
+    def generation_configuration_errors(self, provider: str) -> list[str]:
+        if provider == "nvidia" and not self.nvidia_key:
+            return ["NVIDIA_API_KEY is missing"]
+        return []
 
     def public_configuration_errors(self) -> list[str]:
         errors: list[str] = []

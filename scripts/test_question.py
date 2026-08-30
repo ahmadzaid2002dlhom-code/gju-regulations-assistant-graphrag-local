@@ -15,6 +15,7 @@ from src.config import get_settings
 from src.database.repositories import SupabaseRepository
 from src.database.supabase_client import create_supabase_client
 from src.generation.answer_generator import (
+    NvidiaGenerationProvider,
     OllamaGenerationProvider,
     OpenAIGenerationProvider,
 )
@@ -31,14 +32,15 @@ def main() -> int:
     parser.add_argument("--language", default="auto", choices=("auto", "en", "ar"))
     parser.add_argument(
         "--provider",
-        choices=("ollama", "openai"),
-        default="ollama",
+        choices=("nvidia", "ollama", "openai"),
+        default="nvidia",
         help="Answer generator to use (retrieval embeddings remain OpenAI).",
     )
     args = parser.parse_args()
 
     settings = get_settings()
     errors = settings.public_configuration_errors()
+    errors.extend(settings.generation_configuration_errors(args.provider))
     if errors:
         parser.error("; ".join(errors))
     effective_settings = settings
@@ -53,11 +55,12 @@ def main() -> int:
         )
     repository = SupabaseRepository(create_supabase_client(effective_settings))
     embedding_provider = OpenAIEmbeddingProvider(effective_settings)
-    generator = (
-        OllamaGenerationProvider(effective_settings)
-        if args.provider == "ollama"
-        else OpenAIGenerationProvider(effective_settings)
-    )
+    if args.provider == "ollama":
+        generator = OllamaGenerationProvider(effective_settings)
+    elif args.provider == "nvidia":
+        generator = NvidiaGenerationProvider(effective_settings)
+    else:
+        generator = OpenAIGenerationProvider(effective_settings)
     service = QuestionAnsweringService(
         HybridRetriever(repository, embedding_provider, effective_settings),
         generator,
